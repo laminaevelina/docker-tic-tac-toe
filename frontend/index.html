@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Сетевые Крестики-Нолики в Docker</title>
+    <style>
+        /* Делаем красивый внешний вид */
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5;
+        }
+        h1 { color: #333; }
+        #status {
+            font-size: 20px;
+            margin-bottom: 20px;
+            font-weight: bold;
+            color: #555;
+        }
+        /* Создаем сетку 3х3 для игрового поля */
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 5px;
+        }
+        /* Стили для каждой отдельной ячейки */
+        .cell {
+            width: 100px;
+            height: 100px;
+            background-color: #fff;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            font-size: 40px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s;
+        }
+        .cell:hover { background-color: #e0e0e0; }
+        /* Кнопка сброса игры */
+        button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+        }
+        button:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+
+    <h1>Крестики-Нолики по сети</h1>
+    <div id="status">Подключение к серверу...</div>
+    
+    <!-- Наше игровое поле из 9 клеток (от 0 до 8) -->
+    <div class="board" id="board">
+        <div class="cell" onclick="makeMove(0)"></div>
+        <div class="cell" onclick="makeMove(1)"></div>
+        <div class="cell" onclick="makeMove(2)"></div>
+        <div class="cell" onclick="makeMove(3)"></div>
+        <div class="cell" onclick="makeMove(4)"></div>
+        <div class="cell" onclick="makeMove(5)"></div>
+        <div class="cell" onclick="makeMove(6)"></div>
+        <div class="cell" onclick="makeMove(7)"></div>
+        <div class="cell" onclick="makeMove(8)"></div>
+    </div>
+
+    <button onclick="resetGame()">Начать заново</button>
+
+    <script>
+        // Переменные для хранения роли (X или O), которую мы выберем вручную для теста
+        let myRole = "X"; 
+        
+        // 1. Открываем "телефонный провод" (WebSocket) к нашему бэкенду.
+        // Пока пишем localhost (наш компьютер), порт 8000 (где будет жить FastAPI).
+        const socket = new WebSocket("ws://localhost:8000/ws");
+
+        // 2. Диспетчер событий: что делать, когда от сервера пришло сообщение
+        socket.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            // Если сервер прислал обновление поля или первоначальную сборку
+            if (data.type === "init" || data.type === "update") {
+                drawBoard(data.board);
+                document.getElementById("status").textContent = `Сейчас ходит: ${data.turn}`;
+            }
+        };
+
+        socket.onopen = function() {
+            document.getElementById("status").textContent = "Успешно подключено! Твой ход (если ты X).";
+        };
+
+        socket.onerror = function(error) {
+            document.getElementById("status").textContent = "Ошибка подключения к серверу.";
+        };
+
+        // 3. Функция отрисовки: берет массив из 9 элементов от сервера и заполняет кнопочки текстом
+        function drawBoard(boardState) {
+            const cells = document.querySelectorAll(".cell");
+            for (let i = 0; i < 9; i++) {
+                cells[i].textContent = boardState[i];
+            }
+        }
+
+        // 4. Функция клика: когда игрок нажимает на клетку
+        function makeMove(index) {
+            // Отправляем на сервер JSON-пакет с инфой: какую клетку нажали и кто нажал
+            socket.send(JSON.stringify({
+                "type": "move",
+                "index": index,
+                "player": myRole
+            }));
+        }
+
+        // 5. Функция сброса игры
+        function resetGame() {
+            socket.send(JSON.stringify({ "type": "reset" }));
+        }
+    </script>
+</body>
+</html>
