@@ -59,6 +59,7 @@ docker-compose up --build
 ├── frontend/
 │   ├── Dockerfile      # Инструкция сборки веб-сервера Nginx
 │   └── index.html      # Интерфейс игры, темы оформления и лобби
+├── LICENSE             # Международная лицензия MIT
 ├── .gitignore          # Исключение системных файлов из Git
 ├── docker-compose.yml  # Манифест оркестрации контейнеров
 └── README.md           # Документация проекта
