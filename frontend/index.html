@@ -2,133 +2,298 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Сетевые Крестики-Нолики в Docker</title>
+    <title>Сетевое Игровое Лобби в Docker</title>
     <style>
-        /* Делаем красивый внешний вид */
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Arial Black', sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             height: 100vh;
             margin: 0;
-            background-color: #f0f2f5;
+            transition: all 0.5s ease;
         }
-        h1 { color: #333; }
-        #status {
-            font-size: 20px;
-            margin-bottom: 20px;
-            font-weight: bold;
-            color: #555;
-        }
-        /* Создаем сетку 3х3 для игрового поля */
-        .board {
-            display: grid;
-            grid-template-columns: repeat(3, 100px);
-            grid-template-rows: repeat(3, 100px);
-            gap: 5px;
-        }
-        /* Стили для каждой отдельной ячейки */
-        .cell {
-            width: 100px;
-            height: 100px;
-            background-color: #fff;
-            border: 2px solid #ccc;
-            border-radius: 8px;
-            font-size: 40px;
-            font-weight: bold;
+        body.theme-classic { background-color: #f0f2f5; color: #333; }
+        body.theme-space { color: #fff; background-image: radial-gradient(circle, rgba(255,255,255,0.4) 1px, transparent 1px), radial-gradient(circle, rgba(255,255,255,0.3) 1.5px, transparent 1.5px), linear-gradient(135deg, #0b0c10 0%, #1f2833 50%, #11141a 100%); background-size: 80px 80px, 150px 150px, 100% 100%; position: relative; }
+        body.theme-nature { background: linear-gradient(to bottom, #74b9ff 0%, #81ecec 50%, #55efc4 50%, #00b894 100%); color: #2d3436; }
+
+        h1 { margin: 0 0 15px 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.1); }
+        
+        /* 🚪 СТИЛИ ДЛЯ СТАРТОВОГО ОКНА (ЛОББИ) */
+        .lobby-screen {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            color: #333;
+            width: 400px;
+            text-align: center;
             display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            user-select: none;
-            transition: background-color 0.2s;
+            flex-direction: column;
+            gap: 15px;
         }
-        .cell:hover { background-color: #e0e0e0; }
-        /* Кнопка сброса игры */
-        button {
-            margin-top: 20px;
-            padding: 10px 20px;
+        .name-input {
+            padding: 10px;
             font-size: 16px;
-            cursor: pointer;
-            border-radius: 5px;
-            border: none;
-            background-color: #007bff;
-            color: white;
+            border-radius: 10px;
+            border: 2px solid #ccc;
+            font-family: sans-serif;
+            text-align: center;
         }
-        button:hover { background-color: #0056b3; }
+        .avatar-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .avatar-box {
+            font-size: 40px;
+            padding: 10px;
+            background: #f0f2f5;
+            border-radius: 12px;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .avatar-box:hover:not(.taken) { transform: scale(1.1); background: #e0e2e5; }
+        .avatar-box.selected { border-color: #007bff; background: #e6f2ff; }
+        .avatar-box.taken { opacity: 0.3; cursor: not-allowed; background: #ddd; }
+
+        /* СПИСОК ИГРОКОВ И НЕОПРЕДЕЛИВШИХСЯ */
+        .users-list {
+            text-align: left;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 12px;
+            font-size: 13px;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        .user-status-tag { float: right; font-weight: bold; padding: 1px 6px; border-radius: 5px; font-size: 11px; }
+
+        /* ИГРОВОЙ ЭКРАН (Изначально скрыт) */
+        .game-screen { display: none; flex-direction: column; align-items: center; }
+
+        .top-panel { display: flex; gap: 20px; align-items: center; background: rgba(255, 255, 255, 0.2); padding: 10px 20px; border-radius: 20px; backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 20px; font-size: 14px; }
+        .btn-group { display: flex; gap: 5px; }
+        button { padding: 8px 16px; cursor: pointer; border-radius: 12px; border: 2px solid transparent; font-weight: bold; transition: all 0.2s; }
+        button:hover:not(:disabled) { transform: scale(1.05); }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+        #my-role-display { background: #007bff; color: white; padding: 4px 12px; border-radius: 10px; font-weight: bold; }
+        #dice-view { font-size: 30px; display: inline-block; transition: transform 0.4s ease; }
+        #status { font-size: 20px; margin-bottom: 20px; font-weight: bold; text-align: center; }
+
+        .board { display: grid; grid-template-columns: repeat(3, 100px); grid-template-rows: repeat(3, 100px); gap: 10px; background: rgba(255, 255, 255, 0.15); padding: 10px; border-radius: 16px; backdrop-filter: blur(5px); box-shadow: 0 8px 20px rgba(0,0,0,0.15); }
+        .cell { width: 100px; height: 100px; background-color: rgba(255, 255, 255, 0.95); color: #2d3436; border: none; border-radius: 12px; font-size: 46px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; transition: all 0.2s; }
+        .cell:hover { background-color: #fff; transform: translateY(-3px); }
+        #reset-btn { margin-top: 25px; padding: 10px 25px; font-size: 16px; border-radius: 20px; border: none; background-color: #ff7675; color: white; font-weight: bold; }
     </style>
 </head>
-<body>
+<body class="theme-classic">
 
-    <h1>Крестики-Нолики по сети</h1>
-    <div id="status">Подключение к серверу...</div>
-    
-    <!-- Наше игровое поле из 9 клеток (от 0 до 8) -->
-    <div class="board" id="board">
-        <div class="cell" onclick="makeMove(0)"></div>
-        <div class="cell" onclick="makeMove(1)"></div>
-        <div class="cell" onclick="makeMove(2)"></div>
-        <div class="cell" onclick="makeMove(3)"></div>
-        <div class="cell" onclick="makeMove(4)"></div>
-        <div class="cell" onclick="makeMove(5)"></div>
-        <div class="cell" onclick="makeMove(6)"></div>
-        <div class="cell" onclick="makeMove(7)"></div>
-        <div class="cell" onclick="makeMove(8)"></div>
+    <!-- 🚪 ЭКРАН 1: КОМНАТА ОЖИДАНИЯ (ЛОББИ) -->
+    <div class="lobby-screen" id="lobby-block">
+        <h2 style="margin:0;">Вход в игру</h2>
+        <input type="text" id="username" class="name-input" placeholder="Введите ваше имя..." maxlength="12">
+        
+        <div style="font-size:14px; font-weight:bold; text-align:left;">Выбирите аватарку (символ хода):</div>
+        <div class="avatar-grid">
+            <div class="avatar-box" onclick="selectAvatar('🚀', this)">🚀</div>
+            <div class="avatar-box" onclick="selectAvatar('🛸', this)">🛸</div>
+            <div class="avatar-box" onclick="selectAvatar('🌿', this)">🌿</div>
+            <div class="avatar-box" onclick="selectAvatar('🌸', this)">🌸</div>
+            <div class="avatar-box" onclick="selectAvatar('👻', this)">👻</div>
+            <div class="avatar-box" onclick="selectAvatar('🦊', this)">🦊</div>
+        </div>
+
+        <button id="join-btn" onclick="joinGame()" style="background:#007bff; color:white; padding:10px;" disabled>Войти в комнату</button>
+
+        <!-- Окно списков комнат -->
+        <div style="font-size:12px; font-weight:bold; text-align:left; margin-top:5px;">Кто в комнате:</div>
+        <div class="users-list" id="users-box">
+            <div>Загрузка списка пользователей...</div>
+        </div>
     </div>
 
-    <button onclick="resetGame()">Начать заново</button>
+    <!-- 🎮 ЭКРАН 2: САМА ИГРА (Изначально скрыт) -->
+    <div class="game-screen" id="game-block">
+        <div class="top-panel">
+            <div class="btn-group">
+                <button onclick="changeTheme('classic')" style="background:#fff; color:#333;">⚪</button>
+                <button onclick="changeTheme('space')" style="background:#1f2833; color:#fff;">🚀</button>
+                <button onclick="changeTheme('nature')" style="background:#00b894; color:#fff;">🌿</button>
+            </div>
+            <div>
+                <span id="my-role-display">Назначение...</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <div id="dice-view">🎲</div>
+                <button id="roll-btn" onclick="rollDice()" style="background:#fff; color:#333; border: 1px solid #333; padding:5px 10px;">Бросок</button>
+            </div>
+        </div>
+
+        <div id="status">Ожидание броска кубика...</div>
+        
+        <div class="board" id="board">
+            <div class="cell" onclick="makeMove(0)"></div>
+            <div class="cell" onclick="makeMove(1)"></div>
+            <div class="cell" onclick="makeMove(2)"></div>
+            <div class="cell" onclick="makeMove(3)"></div>
+            <div class="cell" onclick="makeMove(4)"></div>
+            <div class="cell" onclick="makeMove(5)"></div>
+            <div class="cell" onclick="makeMove(6)"></div>
+            <div class="cell" onclick="makeMove(7)"></div>
+            <div class="cell" onclick="makeMove(8)"></div>
+        </div>
+
+        <button id="reset-btn" onclick="resetGame()">Начать заново</button>
+    </div>
 
     <script>
-        // Переменные для хранения роли (X или O), которую мы выберем вручную для теста
-        let myRole = "X"; 
-        
-        // 1. Открываем "телефонный провод" (WebSocket) к нашему бэкенду.
-        // Пока пишем localhost (наш компьютер), порт 8000 (где будет жить FastAPI).
-        const socket = new WebSocket("ws://localhost:8000/ws");
+        let myRole = "Viewer"; 
+        let chosenAvatar = null;
+        let myName = "";
+        const socket = new WebSocket("ws://127.0.0.1:8000/ws");
+        const diceFaces = { 1: "⚀", 2: "⚁", 3: "⚂", 4: "⚃", 5: "⚄", 6: "⚅" };
 
-        // 2. Диспетчер событий: что делать, когда от сервера пришло сообщение
+        function changeTheme(themeName) {
+            document.body.classList.remove('theme-classic', 'theme-space', 'theme-nature');
+            document.body.classList.add('theme-' + themeName);
+        }
+
+        // Выбор аватарки на стартовом экране
+        function selectAvatar(avatar, element) {
+            if (element.classList.contains('taken')) return;
+            
+            document.querySelectorAll('.avatar-box').forEach(b => b.classList.remove('selected'));
+            element.classList.add('selected');
+            chosenAvatar = avatar;
+            document.getElementById("join-btn").disabled = false; // Разрешаем вход
+        }
+
+        // Вход в лобби
+        function joinGame() {
+            myName = document.getElementById("username").value.trim();
+            socket.send(JSON.stringify({
+                "type": "join_lobby",
+                "name": myName,
+                "avatar": chosenAvatar
+            }));
+            // Переключаем экраны
+            document.getElementById("lobby-block").style.display = "none";
+            document.getElementById("game-block").style.display = "flex";
+        }
+
+        function rollDice() {
+            socket.send(JSON.stringify({ "type": "roll_dice" }));
+        }
+
         socket.onmessage = function(event) {
             const data = JSON.parse(event.data);
             
-            // Если сервер прислал обновление поля или первоначальную сборку
-            if (data.type === "init" || data.type === "update") {
-                drawBoard(data.board);
-                document.getElementById("status").textContent = `Сейчас ходит: ${data.turn}`;
+            // Обновление списков пользователей в лобби
+                        // 1. Обновление списков пользователей в лобби
+            if (data.type === "lobby_update") {
+                const usersBox = document.getElementById("users-box");
+                usersBox.innerHTML = "";
+                
+                const takenAvatars = data.users.map(u => u.avatar).filter(a => a !== null);
+                document.querySelectorAll('.avatar-box').forEach(box => {
+                    const av = box.textContent;
+                    if (takenAvatars.includes(av) && av !== chosenAvatar) {
+                        box.classList.add('taken');
+                    } else {
+                        box.classList.remove('taken');
+                    }
+                });
+
+                data.users.forEach(u => {
+                    const div = document.createElement("div");
+                    div.style.marginBottom = "5px";
+                    
+                    let roleTag = "";
+                    if (u.game_role === "Игрок 1") {
+                        roleTag = `<span class="user-status-tag" style="background:#e6f2ff; color:#007bff;">Крестик (1)</span>`;
+                    } else if (u.game_role === "Игrok 2") {
+                        roleTag = `<span class="user-status-tag" style="background:#e6fff2; color:#00b894;">Нолик (2)</span>`;
+                    } else if (u.game_role === "Зритель 👀") {
+                        roleTag = `<span class="user-status-tag" style="background:#eee; color:#666;">Зритель</span>`;
+                    } else {
+                        roleTag = `<span class="user-status-tag" style="background:#fff3cd; color:#856404;">В лобби</span>`;
+                    }
+                    
+                    div.innerHTML = `${u.avatar || "👤"} <b>${u.name}</b> ${roleTag}`;
+                    usersBox.appendChild(div);
+                });
+            }
+
+            // 2. Получение личной роли от сервера
+            if (data.type === "role_assigned") {
+                myRole = data.your_role;
+                const roleDisplay = document.getElementById("my-role-display");
+                roleDisplay.textContent = myRole === "Зритель 👀" ? "Зритель 👀" : `Ты: ${myRole} (${chosenAvatar})`;
+            }
+
+            // 3. Обработка анимации и значения кубика
+            if (data.type === "dice_rolled" || data.type === "init") {
+                if (data.dice_value) {
+                    const diceEl = document.getElementById("dice-view");
+                    diceEl.style.transform = "rotate(360deg)";
+                    setTimeout(() => {
+                        diceEl.textContent = diceFaces[data.dice_value];
+                        diceEl.style.transform = "rotate(0deg)";
+                    }, 200);
+                    document.getElementById("roll-btn").disabled = true;
+                } else {
+                    document.getElementById("dice-view").textContent = "🎲";
+                    document.getElementById("roll-btn").disabled = (myRole === "Зритель 👀");
+                }
+            }
+            
+            // 4. Отрисовка поля и статуса матча
+            if (data.type === "init" || data.type === "update" || data.type === "dice_rolled") {
+                if (data.board) drawBoard(data.board);
+                
+                if (data.winner) {
+                    if (data.winner === "Ничья") {
+                        document.getElementById("status").textContent = "🤝 Ничья! Игра окончена.";
+                    } else {
+                        document.getElementById("status").textContent = `🎉 Победил Игрок: ${data.winner}!`;
+                    }
+                } else {
+                    if (data.turn === null) {
+                        document.getElementById("status").textContent = "🎲 Бросьте кубик для начала игры!";
+                    } else {
+                        if (data.turn_name) {
+                            document.getElementById("status").textContent = `Сейчас ходит: ${data.turn_name} ${data.turn === myRole ? "(Твой ход!)" : ""}`;
+                        } else {
+                            document.getElementById("status").textContent = `Сейчас ходит: ${data.turn === "Игрок 1" ? "Игрок 1" : "Игрок 2"}`;
+                        }
+                    }
+                }
             }
         };
 
-        socket.onopen = function() {
-            document.getElementById("status").textContent = "Успешно подключено! Твой ход (если ты X).";
-        };
+        socket.onerror = function() { document.getElementById("status").textContent = "Ошибка сети."; };
 
-        socket.onerror = function(error) {
-            document.getElementById("status").textContent = "Ошибка подключения к серверу.";
-        };
-
-        // 3. Функция отрисовки: берет массив из 9 элементов от сервера и заполняет кнопочки текстом
         function drawBoard(boardState) {
             const cells = document.querySelectorAll(".cell");
-            for (let i = 0; i < 9; i++) {
-                cells[i].textContent = boardState[i];
+            for (let i = 0; i < 9; i++) { cells[i].textContent = boardState[i]; }
+        }
+
+        function makeMove(index) {
+            if (myRole !== "Зритель 👀") {
+                socket.send(JSON.stringify({ "type": "move", "index": index }));
             }
         }
 
-        // 4. Функция клика: когда игрок нажимает на клетку
-        function makeMove(index) {
-            // Отправляем на сервер JSON-пакет с инфой: какую клетку нажали и кто нажал
-            socket.send(JSON.stringify({
-                "type": "move",
-                "index": index,
-                "player": myRole
-            }));
-        }
-
-        // 5. Функция сброса игры
         function resetGame() {
             socket.send(JSON.stringify({ "type": "reset" }));
         }
     </script>
 </body>
 </html>
+
+                        
